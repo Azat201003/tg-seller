@@ -1,0 +1,8 @@
+django
+djangorestframework
+markdown
+django-filter
+requests
+validators
+django-unfold
+gunicorn
