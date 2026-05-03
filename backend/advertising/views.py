@@ -22,6 +22,6 @@ class AdvertisesView(generics.ListCreateAPIView):
         return advertises
 
 class FiltersView(generics.ListCreateAPIView):
-    queryset = Filter.objects.all()
+    queryset = Filter.objects.all().filter(is_active=True).values("filter_id", "name")
     serializer_class = FilterSerializer
     permission_classes = [permissions.AllowAny]

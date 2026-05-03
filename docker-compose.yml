@@ -22,6 +22,15 @@ services:
     env_file:
       - backend/.env
     restart: always
+
+  bot:
+    build: bot
+    env_file:
+      - bot/.env
+    network_mode: host
+    restart: always
+    depends_on:
+      - backend
   
 networks:
   net:
