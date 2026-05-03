@@ -32,6 +32,8 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
 	defer cancel()
 
+	sessionManager := NewSessionManager()
+
 	err := client.Run(ctx, func(ctx context.Context) error {
 		log.Println("Successfully started!")
 
@@ -54,22 +56,38 @@ func main() {
 				return nil
 			}
 			log.Println(message.Message)
+			inputPeer, _ := peer.EntitiesFromUpdate(e).ExtractPeer(message.PeerID)
+			builder := sender.To(inputPeer)
 			if message.Message == "/start" {
-				inputPeer, _ := peer.EntitiesFromUpdate(e).ExtractPeer(message.PeerID)
-				_, err := sender.To(inputPeer).Markup(markup.InlineKeyboard(
+				_, err := builder.Markup(markup.InlineKeyboard(
 					markup.Row(markup.Callback("Найти товары", []byte("search0:[]"))),
 					markup.Row(markup.Callback("Разместить товар", []byte("place0"))),
 				)).Text(ctx, START_MESSAGE)
-				log.Println(err)
 
 				return err
+			} else {
+				if userPeer, ok := message.PeerID.(*tg.PeerUser); ok {
+					log.Println(userPeer.UserID)
+					log.Println(sessionManager.getSessionState(userPeer.UserID))
+					if state := sessionManager.getSessionState(userPeer.UserID); state != -1 {
+						switch state {
+						case 0:
+							sessionManager.putNextData(userPeer.UserID, message.Message)
+							builder.Text(ctx, PLACE_MESSAGE_2)
+						case 1:
+							sessionManager.putNextData(userPeer.UserID, message.Message)
+							builder.Text(ctx, PLACE_MESSAGE_3)
+						}
+					}
+				}
 			}
 			return nil
 		})
 
 		dispatcher.OnBotCallbackQuery(func(ctx context.Context, e tg.Entities, update *tg.UpdateBotCallbackQuery) error {
+			inputPeer, _ := peer.EntitiesFromUpdate(e).ExtractPeer(update.Peer)
+			builder := sender.To(inputPeer)
 			if strings.HasPrefix(string(update.Data), "search0:") {
-				log.Println(string(update.Data))
 				filters := getAllFilters()
 
 				selectedFiltersBlob, _ := strings.CutPrefix(string(update.Data), "search0:")
@@ -90,26 +108,25 @@ func main() {
 						rows = append(rows, markup.Row(markup.Callback(filter.Name+" ✅", fmt.Appendf(nil, "search0:%v", string(selectedFiltersBytes)))))
 					}
 				}
-				inputPeer, _ := peer.EntitiesFromUpdate(e).ExtractPeer(update.Peer)
-				_, err := sender.To(inputPeer).Markup(markup.InlineKeyboard(rows...)).Text(ctx, FIND_MESSAGE)
-				log.Println(err)
+				_, err := builder.Markup(markup.InlineKeyboard(rows...)).Text(ctx, FIND_MESSAGE)
 
 				return err
 			} else if strings.HasPrefix(string(update.Data), "search1:") {
-				log.Println(string(update.Data))
 				selectedFiltersBlob, _ := strings.CutPrefix(string(update.Data), "search1:")
 				var selectedFilters []int64
 				json.Unmarshal([]byte(selectedFiltersBlob), &selectedFilters)
 
 				advertises := getFilteredAdvertises(selectedFilters)
 
-				inputPeer, _ := peer.EntitiesFromUpdate(e).ExtractPeer(update.Peer)
-				builder := sender.To(inputPeer)
 				for _, advertise := range advertises {
-					builder.Markup(markup.InlineKeyboard(markup.Row(markup.URL("Перейти", advertise.Link)))).Text(ctx, advertise.Name)
+					builder.Markup(markup.InlineKeyboard(markup.Row(markup.URL(SEARCH_BUTTON_2, advertise.Link)))).Text(ctx, advertise.Name)
 				}
 
 				return err
+			} else if strings.HasPrefix(string(update.Data), "place0") {
+				builder.Text(ctx, PLACE_MESSAGE_1)
+				log.Println(update.UserID)
+				sessionManager.register(update.UserID, NewAdvertiseSession())
 			}
 			return nil
 		})

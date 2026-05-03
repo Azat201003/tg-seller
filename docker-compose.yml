@@ -27,6 +27,7 @@ services:
     build: bot
     env_file:
       - bot/.env
+      - bot/secrets.env
     network_mode: host
     restart: always
     depends_on:
